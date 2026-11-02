@@ -1,0 +1,139 @@
+<resources>
+    <string name="app_name">NoteStudio</string>
+
+    <!-- Navigation & Workspace -->
+    <string name="nav_all_notes">All notes</string>
+    <string name="nav_favorites">Favorites</string>
+    <string name="nav_trash">Trash</string>
+    <string name="nav_folders">Folders</string>
+    <string name="nav_new_folder">New folder</string>
+    <string name="nav_menu_desc">Open workspace drawer</string>
+    <string name="search_placeholder">Search notes and checklists</string>
+    <string name="search_clear_desc">Clear search</string>
+    <string name="toggle_theme_desc">Toggle light and dark appearance</string>
+    <string name="toggle_layout_desc">Switch grid or list layout</string>
+    <string name="new_note_fab_desc">Create new note</string>
+    <string name="notes_count_format">%1$d notes</string>
+    <string name="notes_count_single">1 note</string>
+
+    <!-- Empty States -->
+    <string name="empty_notes_title">Start a clean page</string>
+    <string name="empty_notes_subtitle">Capture typed thoughts, checklists, or freehand sketches in one calm workspace.</string>
+    <string name="empty_notes_action">Create note</string>
+    <string name="empty_favorites_title">No starred notes</string>
+    <string name="empty_favorites_subtitle">Star important pages to keep them pinned within quick reach.</string>
+    <string name="empty_trash_title">Trash is empty</string>
+    <string name="empty_trash_subtitle">Deleted pages stay here until you permanently clear them.</string>
+    <string name="empty_search_title">No matching notes</string>
+    <string name="empty_search_subtitle">Try a shorter keyword or clear the active filter.</string>
+    <string name="empty_illustration_desc">Minimal open notebook illustration</string>
+
+    <!-- Editor -->
+    <string name="editor_back_desc">Save and go back</string>
+    <string name="editor_title_placeholder">Page title</string>
+    <string name="editor_body_placeholder">Write, structure ideas, or switch to Ink to sketch…</string>
+    <string name="editor_mode_type">Type</string>
+    <string name="editor_mode_ink">Ink</string>
+    <string name="editor_mode_split">Page</string>
+    <string name="editor_favorite_desc">Star note</string>
+    <string name="editor_pin_desc">Pin note to top</string>
+    <string name="editor_template_desc">Page template</string>
+    <string name="editor_export_pdf_desc">Export as PDF</string>
+    <string name="editor_delete_desc">Move to trash</string>
+    <string name="editor_restore_desc">Restore note</string>
+    <string name="editor_delete_forever_desc">Delete permanently</string>
+    <string name="editor_add_checklist">Add checklist item</string>
+    <string name="editor_checklist_placeholder">To-do item</string>
+    <string name="editor_remove_checklist_desc">Remove checklist item</string>
+    <string name="editor_folder_label">Folder</string>
+    <string name="editor_unfiled">Unfiled</string>
+
+    <!-- S-Pen / Ink Toolbar -->
+    <string name="tool_fountain">Pen</string>
+    <string name="tool_highlighter">Marker</string>
+    <string name="tool_eraser">Eraser</string>
+    <string name="tool_lasso">Lasso</string>
+    <string name="tool_undo_desc">Undo stroke</string>
+    <string name="tool_redo_desc">Redo stroke</string>
+    <string name="tool_clear_canvas">Clear ink</string>
+    <string name="stroke_fine">Fine</string>
+    <string name="stroke_medium">Medium</string>
+    <string name="stroke_bold">Bold</string>
+    <string name="eraser_small">Small</string>
+    <string name="eraser_medium">Medium</string>
+    <string name="eraser_large">Large</string>
+    <string name="eraser_radius_label">Eraser size</string>
+    <string name="color_swatch_desc">Select %1$s pen color</string>
+    <string name="thickness_preset_desc">Select %1$s line thickness</string>
+    <string name="canvas_touch_hint">Draw or write with finger or stylus</string>
+    <string name="canvas_semantics_desc">Freehand handwriting drawing surface</string>
+    <string name="tool_grid_toggle_label">Grid</string>
+    <string name="tool_grid_enable_desc">Show alignment grid background</string>
+    <string name="tool_grid_disable_desc">Hide alignment grid background</string>
+
+    <!-- Paper Templates -->
+    <string name="template_sheet_title">Page style</string>
+    <string name="template_blank">Blank</string>
+    <string name="template_ruled">Ruled</string>
+    <string name="template_grid">Grid</string>
+    <string name="template_dotted">Dotted</string>
+    <string name="template_cornell">Cornell</string>
+
+    <!-- Folders & Dialogs -->
+    <string name="folder_dialog_title">Create folder</string>
+    <string name="folder_name_label">Folder name</string>
+    <string name="folder_name_placeholder">Architecture, Meetings, Sketches…</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_create">Create</string>
+    <string name="action_empty_trash">Empty trash</string>
+    <string name="pdf_exported_message">Saved PDF to Downloads / Share ready</string>
+    <string name="pdf_share_title">Share Note PDF</string>
+    <string name="png_export_desc">Save canvas as PNG to gallery</string>
+    <string name="png_saved_gallery_message">Saved canvas PNG to device Gallery</string>
+    <string name="png_save_failed_message">Could not save PNG to Gallery</string>
+    <string name="editor_add_image">Add image</string>
+    <string name="editor_remove_image_desc">Remove attached image</string>
+    <string name="note_attached_image_desc">Attached note image</string>
+    <string name="badge_pinned">Pinned</string>
+    <string name="badge_ink">Ink</string>
+    <string name="badge_images_format">%1$d img</string>
+    <string name="badge_checklist_format">%1$d/%2$d done</string>
+
+    <!-- Drag & Drop -->
+    <string name="drag_checklist_handle_desc">Drag to reorder checklist item</string>
+    <string name="drag_image_handle_desc">Drag to reorder attached image</string>
+    <string name="drag_note_handle_desc">Hold and drag note to a folder</string>
+    <string name="drop_zone_hint_Move_to_folder">Drop onto a folder chip to move note</string>
+    <string name="drop_moved_to_folder_message">Moved note to %1$s</string>
+    <string name="drop_moved_to_unfiled_message">Removed note from folder</string>
+    <string name="drop_external_overlay_title">Drop to add to note</string>
+    <string name="drop_external_overlay_subtitle">Release to attach images or insert dropped text</string>
+
+    <!-- Home Screen Widgets -->
+    <string name="widget_quick_capture_label">NoteStudio Quick Capture</string>
+    <string name="widget_quick_capture_desc">Create a clean page, ink sketch, or checklist note in one tap from your home screen.</string>
+    <string name="widget_note_preview_label">NoteStudio Page Preview</string>
+    <string name="widget_note_preview_desc">Pin a live Samsung Notes page preview with text, checklist progress, and ink thumbnail.</string>
+    <string name="widget_action_new_note">New note</string>
+    <string name="widget_action_ink">Ink</string>
+    <string name="widget_action_checklist">Checklist</string>
+    <string name="widget_preview_empty_title">Start a clean page</string>
+    <string name="widget_preview_empty_body">Tap to open NoteStudio or create a new handwritten or typed note.</string>
+    <string name="widget_pin_note_desc">Pin note widget to home screen</string>
+    <string name="widget_pin_quick_capture_action">Add quick capture widget</string>
+    <string name="widget_pinned_requested_message">Home screen widget prompt opened</string>
+    <string name="widget_pin_unsupported_message">Use your launcher widget picker to add NoteStudio widgets</string>
+    <string name="nav_widgets_section">Home screen widgets</string>
+
+    <!-- Lasso Selection & Transform -->
+    <string name="lasso_hint_draw">Draw a loop around handwriting or canvas images to move, scale, or rotate</string>
+    <string name="lasso_selected_count_format">%1$d selected · Drag to move, handles to scale or rotate</string>
+    <string name="lasso_rotate_left_desc">Rotate selection counterclockwise</string>
+    <string name="lasso_rotate_right_desc">Rotate selection clockwise</string>
+    <string name="lasso_scale_down_desc">Shrink selection</string>
+    <string name="lasso_scale_up_desc">Enlarge selection</string>
+    <string name="lasso_delete_selection_desc">Delete selected elements</string>
+    <string name="lasso_clear_selection_desc">Deselect</string>
+    <string name="lasso_add_canvas_image">Add canvas image</string>
+    <string name="image_place_on_canvas_desc">Place image onto handwriting canvas</string>
+</resources>
