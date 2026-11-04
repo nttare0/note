@@ -30,15 +30,16 @@ object SampleNotebookData {
             InkStroke(
                 id = UUID.randomUUID().toString(),
                 points = listOf(
-                    StrokePoint(36f, 110f),
-                    StrokePoint(92f, 52f),
-                    StrokePoint(164f, 128f),
-                    StrokePoint(242f, 48f),
-                    StrokePoint(308f, 96f)
+                    StrokePoint(36f, 110f, pressure = 0.22f),
+                    StrokePoint(92f, 52f, pressure = 0.88f),
+                    StrokePoint(164f, 128f, pressure = 0.44f),
+                    StrokePoint(242f, 48f, pressure = 0.96f),
+                    StrokePoint(308f, 96f, pressure = 0.20f)
                 ),
                 colorKey = "AMBER",
                 widthDp = 3.2f,
-                isHighlighter = false
+                isHighlighter = false,
+                isStylus = true
             ),
             InkStroke(
                 id = UUID.randomUUID().toString(),

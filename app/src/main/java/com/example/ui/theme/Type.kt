@@ -8,6 +8,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.R
 
+val ExcalidrawSketchFamily = FontFamily(
+    Font(R.font.shantell_sans, FontWeight.Normal),
+    Font(R.font.shantell_sans, FontWeight.Medium),
+    Font(R.font.shantell_sans, FontWeight.SemiBold),
+    Font(R.font.shantell_sans, FontWeight.Bold)
+)
+
 val InterFontFamily = FontFamily(
     Font(R.font.inter, FontWeight.Normal),
     Font(R.font.inter, FontWeight.Medium),
@@ -15,15 +22,15 @@ val InterFontFamily = FontFamily(
     Font(R.font.inter, FontWeight.Bold)
 )
 
-// Clean 3-tier typographic scale (Heading 22sp, Body 15sp, Caption/Label 12sp)
-// using weight and color for hierarchy per minimalist design principles.
+// Excalidraw-inspired 3-tier typographic scale:
+// Hand-drawn whiteboard display headings (Shantell Sans 22sp) paired with crisp Inter UI & body copy.
 val Typography = Typography(
     headlineMedium = TextStyle(
-        fontFamily = InterFontFamily,
+        fontFamily = ExcalidrawSketchFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = (-0.4).sp
+        lineHeight = 29.sp,
+        letterSpacing = (-0.2).sp
     ),
     titleMedium = TextStyle(
         fontFamily = InterFontFamily,
@@ -55,9 +62,9 @@ val Typography = Typography(
     ),
     labelSmall = TextStyle(
         fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.5.sp,
+        lineHeight = 15.sp,
         letterSpacing = 0.1.sp
     )
 )

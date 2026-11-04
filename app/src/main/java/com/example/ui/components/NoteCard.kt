@@ -1,9 +1,10 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,8 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -38,17 +43,22 @@ import com.example.R
 import com.example.data.NoteEntity
 import com.example.data.NoteSerializer
 import com.example.data.PaperTemplate
+import com.example.util.InkPaletteHelper
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NoteCard(
     note: NoteEntity,
     folderName: String?,
     isDarkTheme: Boolean,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -62,10 +72,16 @@ fun NoteCard(
         SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(note.updatedAt))
     }
 
-    val borderColor = if (note.isPinned) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+    val borderColor = when {
+        isSelected -> MaterialTheme.colorScheme.primary
+        note.isPinned -> MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+        else -> MaterialTheme.colorScheme.outline
+    }
+
+    val cardBgColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (isDarkTheme) 0.28f else 0.36f)
     } else {
-        MaterialTheme.colorScheme.outline
+        MaterialTheme.colorScheme.surface
     }
 
     val inkDefault = resolveInkColor("INK", isDarkTheme)
@@ -78,14 +94,32 @@ fun NoteCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = if (isSelected) 4.dp else 2.dp,
+                shape = MaterialTheme.shapes.medium,
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                spotColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
+            )
             .clip(MaterialTheme.shapes.medium)
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, borderColor, MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick)
+            .background(cardBgColor)
+            .border(
+                width = when {
+                    isSelected -> 2.dp
+                    note.isPinned -> 1.5.dp
+                    else -> 1.dp
+                },
+                color = borderColor,
+                shape = MaterialTheme.shapes.medium
+            )
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(16.dp)
             .testTag("note_item_card_${note.id}")
     ) {
-        // Header row: Pin/Folder badge + Star toggle
+        // Header row: Selection indicator + Pin/Folder badge + Star toggle
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -96,6 +130,20 @@ fun NoteCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.weight(1f)
             ) {
+                if (isSelectionMode || isSelected) {
+                    Icon(
+                        imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                        contentDescription = stringResource(R.string.note_selected_desc),
+                        tint = if (isSelected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier
+                            .size(18.dp)
+                            .testTag("note_selected_badge_${note.id}")
+                    )
+                }
                 if (note.isPinned) {
                     Icon(
                         imageVector = Icons.Filled.PushPin,
@@ -105,16 +153,13 @@ fun NoteCard(
                     )
                 }
                 val tagText = folderName ?: template.labelKey
-                Text(
+                BadgePill(
                     text = tagText,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    highlighted = isSelected || note.isPinned || folderName != null
                 )
             }
 
-            if (!note.isTrashed) {
+            if (!note.isTrashed && !isSelectionMode) {
                 IconButton(
                     onClick = onToggleFavorite,
                     modifier = Modifier
@@ -193,19 +238,25 @@ fun NoteCard(
                         val scaled = stroke.points.map {
                             it.copy(x = it.x * scale, y = it.y * scale)
                         }
-                        val strokeCol = when (stroke.colorKey) {
-                            "AMBER" -> inkAmber
-                            "SLATE" -> inkSlate
-                            "BLUE" -> inkBlue
-                            "GREEN" -> inkGreen
-                            "CORAL" -> inkCoral
-                            else -> inkDefault
+                        val customArgb = InkPaletteHelper.parseHexRgbToArgbInt(stroke.colorKey)
+                        val strokeCol = if (customArgb != null) {
+                            Color(customArgb)
+                        } else {
+                            when (stroke.colorKey) {
+                                "AMBER" -> inkAmber
+                                "SLATE" -> inkSlate
+                                "BLUE" -> inkBlue
+                                "GREEN" -> inkGreen
+                                "CORAL" -> inkCoral
+                                else -> inkDefault
+                            }
                         }
                         drawSmoothStroke(
                             points = scaled,
                             color = strokeCol,
                             widthDp = (stroke.widthDp * 0.65f).coerceAtLeast(1.2f),
-                            isHighlighter = stroke.isHighlighter
+                            isHighlighter = stroke.isHighlighter,
+                            isStylus = stroke.isStylus
                         )
                     }
                 }

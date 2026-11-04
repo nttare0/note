@@ -69,6 +69,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -99,6 +100,7 @@ import kotlinx.coroutines.launch
 fun NoteEditorScreen(
     editorState: EditorState,
     folders: List<FolderEntity>,
+    customInkColors: List<String> = emptyList(),
     isDarkTheme: Boolean,
     onBack: () -> Unit,
     onTitleChange: (String) -> Unit,
@@ -121,12 +123,15 @@ fun NoteEditorScreen(
     onReorderChecklistItems: (Int, Int) -> Unit,
     onSelectInkTool: (InkTool) -> Unit,
     onSelectInkColor: (String) -> Unit,
+    onAddCustomInkColor: (String) -> Unit = {},
+    onRemoveCustomInkColor: (String) -> Unit = {},
     onSelectStrokeWidth: (Float) -> Unit,
     onCommitStroke: (InkStroke) -> Unit,
     onEraseSegmentSweep: (Float, Float, Float, Float, Float) -> Unit,
     onEraseGestureStart: () -> Unit,
     onEraseGestureEnd: () -> Unit,
     onCompleteLassoSelection: (List<StrokePoint>) -> Unit = {},
+    onLongPressSelectCanvasElement: (Float, Float) -> Boolean = { _, _ -> false },
     onClearLassoSelection: () -> Unit = {},
     onLassoTransformStart: () -> Unit = {},
     onLassoTransformDelta: (Float, Float, Float, Float, Float, Float) -> Unit = { _, _, _, _, _, _ -> },
@@ -137,6 +142,7 @@ fun NoteEditorScreen(
     onRedoStroke: () -> Unit,
     onClearCanvas: () -> Unit,
     onToggleCanvasGrid: () -> Unit,
+    onTogglePressureSensitivity: () -> Unit = {},
     onSaveCanvasPng: ((Boolean) -> Unit) -> Unit,
     onExportPdf: ((Boolean) -> Unit) -> Unit,
     onPinNoteWidget: ((Boolean) -> Unit) -> Unit = {},
@@ -217,13 +223,18 @@ fun NoteEditorScreen(
                     IconButton(
                         onClick = onBack,
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(44.dp)
+                            .shadow(1.5.dp, MaterialTheme.shapes.small)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
                             .testTag("editor_back_button")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = stringResource(R.string.editor_back_desc),
-                            tint = MaterialTheme.colorScheme.onBackground
+                            tint = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
@@ -425,6 +436,7 @@ fun NoteEditorScreen(
                             activeTool = editorState.activeTool,
                             activeColorKey = editorState.activeColorKey,
                             activeStrokeWidth = editorState.activeStrokeWidth,
+                            isPressureSensitive = editorState.isPressureSensitive,
                             isDarkTheme = isDarkTheme,
                             fillFullHeight = true,
                             onCommitStroke = onCommitStroke,
@@ -435,6 +447,9 @@ fun NoteEditorScreen(
                             onLassoTransformStart = onLassoTransformStart,
                             onLassoTransformDelta = onLassoTransformDelta,
                             onLassoTransformEnd = onLassoTransformEnd,
+                            onLongPressSelectElement = onLongPressSelectCanvasElement,
+                            onDeleteSelectedElements = onDeleteLassoSelection,
+                            onClearSelection = onClearLassoSelection,
                             modifier = Modifier.weight(1f)
                         )
                         if (!editorState.isTrashed) {
@@ -447,17 +462,24 @@ fun NoteEditorScreen(
                                 activeStrokeWidth = editorState.activeStrokeWidth,
                                 canUndo = editorState.canvasHistory.canUndo,
                                 canRedo = editorState.canvasHistory.canRedo,
+                                undoCount = editorState.canvasHistory.undoCount,
+                                redoCount = editorState.canvasHistory.redoCount,
                                 canClear = hasCanvasContent,
+                                customColorKeys = customInkColors,
                                 isGridEnabled = editorState.template == PaperTemplate.GRID,
+                                isPressureSensitive = editorState.isPressureSensitive,
                                 lassoSelectedCount = editorState.lassoSelection.totalCount,
                                 isDarkTheme = isDarkTheme,
                                 onSelectTool = onSelectInkTool,
                                 onSelectColor = onSelectInkColor,
+                                onAddCustomColor = onAddCustomInkColor,
+                                onRemoveCustomColor = onRemoveCustomInkColor,
                                 onSelectWidth = onSelectStrokeWidth,
                                 onUndo = onUndoStroke,
                                 onRedo = onRedoStroke,
                                 onClear = onClearCanvas,
                                 onToggleGrid = onToggleCanvasGrid,
+                                onTogglePressureSensitivity = onTogglePressureSensitivity,
                                 onSavePng = triggerSavePngToGallery,
                                 onRotateSelectionLeft = { onStepLassoTransform(1f, -15f) },
                                 onRotateSelectionRight = { onStepLassoTransform(1f, 15f) },
@@ -632,10 +654,16 @@ fun NoteEditorScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Body Text Editor Card
+                        // Body Text Editor Whiteboard Card
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .shadow(
+                                    elevation = 2.dp,
+                                    shape = MaterialTheme.shapes.medium,
+                                    ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                                    spotColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
+                                )
                                 .clip(MaterialTheme.shapes.medium)
                                 .background(MaterialTheme.colorScheme.surface)
                                 .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
@@ -748,6 +776,7 @@ fun NoteEditorScreen(
                                 activeTool = editorState.activeTool,
                                 activeColorKey = editorState.activeColorKey,
                                 activeStrokeWidth = editorState.activeStrokeWidth,
+                                isPressureSensitive = editorState.isPressureSensitive,
                                 isDarkTheme = isDarkTheme,
                                 canvasHeight = 280.dp,
                                 onCommitStroke = onCommitStroke,
@@ -757,7 +786,10 @@ fun NoteEditorScreen(
                                 onCompleteLassoSelection = onCompleteLassoSelection,
                                 onLassoTransformStart = onLassoTransformStart,
                                 onLassoTransformDelta = onLassoTransformDelta,
-                                onLassoTransformEnd = onLassoTransformEnd
+                                onLassoTransformEnd = onLassoTransformEnd,
+                                onLongPressSelectElement = onLongPressSelectCanvasElement,
+                                onDeleteSelectedElements = onDeleteLassoSelection,
+                                onClearSelection = onClearLassoSelection
                             )
 
                             if (!editorState.isTrashed) {
@@ -770,17 +802,24 @@ fun NoteEditorScreen(
                                     activeStrokeWidth = editorState.activeStrokeWidth,
                                     canUndo = editorState.canvasHistory.canUndo,
                                     canRedo = editorState.canvasHistory.canRedo,
+                                    undoCount = editorState.canvasHistory.undoCount,
+                                    redoCount = editorState.canvasHistory.redoCount,
                                     canClear = hasCanvasContent,
+                                    customColorKeys = customInkColors,
                                     isGridEnabled = editorState.template == PaperTemplate.GRID,
+                                    isPressureSensitive = editorState.isPressureSensitive,
                                     lassoSelectedCount = editorState.lassoSelection.totalCount,
                                     isDarkTheme = isDarkTheme,
                                     onSelectTool = onSelectInkTool,
                                     onSelectColor = onSelectInkColor,
+                                    onAddCustomColor = onAddCustomInkColor,
+                                    onRemoveCustomColor = onRemoveCustomInkColor,
                                     onSelectWidth = onSelectStrokeWidth,
                                     onUndo = onUndoStroke,
                                     onRedo = onRedoStroke,
                                     onClear = onClearCanvas,
                                     onToggleGrid = onToggleCanvasGrid,
+                                    onTogglePressureSensitivity = onTogglePressureSensitivity,
                                     onSavePng = triggerSavePngToGallery,
                                     onRotateSelectionLeft = { onStepLassoTransform(1f, -15f) },
                                     onRotateSelectionRight = { onStepLassoTransform(1f, 15f) },
@@ -906,9 +945,12 @@ private fun ModeSegmentedTabs(
     )
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier
+            .shadow(1.5.dp, MaterialTheme.shapes.small)
             .clip(MaterialTheme.shapes.small)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
             .padding(3.dp)
     ) {
         tabs.forEach { (mode, labelRes) ->
@@ -916,20 +958,20 @@ private fun ModeSegmentedTabs(
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .height(32.dp)
+                    .height(34.dp)
                     .clip(MaterialTheme.shapes.extraSmall)
                     .background(
-                        if (selected) MaterialTheme.colorScheme.surface
-                        else MaterialTheme.colorScheme.surfaceVariant
+                        if (selected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surface
                     )
                     .clickable { onSelectMode(mode) }
-                    .padding(horizontal = 10.dp)
+                    .padding(horizontal = 12.dp)
                     .testTag("editor_mode_${mode.name}")
             ) {
                 Text(
                     text = stringResource(labelRes),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (selected) MaterialTheme.colorScheme.onSurface
+                    color = if (selected) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

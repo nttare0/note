@@ -65,11 +65,15 @@
     <string name="eraser_radius_label">Eraser size</string>
     <string name="color_swatch_desc">Select %1$s pen color</string>
     <string name="thickness_preset_desc">Select %1$s line thickness</string>
-    <string name="canvas_touch_hint">Draw or write with finger or stylus</string>
+    <string name="canvas_touch_hint">Draw or write with finger or pressure-sensitive stylus</string>
     <string name="canvas_semantics_desc">Freehand handwriting drawing surface</string>
     <string name="tool_grid_toggle_label">Grid</string>
     <string name="tool_grid_enable_desc">Show alignment grid background</string>
     <string name="tool_grid_disable_desc">Hide alignment grid background</string>
+    <string name="tool_pressure_label">Pressure</string>
+    <string name="tool_pressure_enable_desc">Enable stylus pressure sensitivity</string>
+    <string name="tool_pressure_disable_desc">Disable stylus pressure sensitivity</string>
+    <string name="stylus_pressure_live_format">Stylus · %1$d%%</string>
 
     <!-- Paper Templates -->
     <string name="template_sheet_title">Page style</string>
@@ -136,4 +140,29 @@
     <string name="lasso_clear_selection_desc">Deselect</string>
     <string name="lasso_add_canvas_image">Add canvas image</string>
     <string name="image_place_on_canvas_desc">Place image onto handwriting canvas</string>
+
+    <!-- Custom Ink Palette Picker & Undo/Redo -->
+    <string name="palette_customize_desc">Customize ink color palette</string>
+    <string name="palette_dialog_title">Ink palette</string>
+    <string name="palette_dialog_subtitle">Pick a preset shade or craft a custom ink color.</string>
+    <string name="palette_presets_label">Curated shades</string>
+    <string name="palette_hue_label">Hue</string>
+    <string name="palette_tone_label">Richness</string>
+    <string name="palette_brightness_label">Brightness</string>
+    <string name="palette_hex_label">Hex code</string>
+    <string name="palette_saved_custom_label">Saved custom colors</string>
+    <string name="palette_remove_custom_desc">Remove custom color %1$s</string>
+    <string name="palette_apply_action">Add color</string>
+    <string name="tool_undo_label">Undo</string>
+    <string name="tool_redo_label">Redo</string>
+
+    <!-- Long-Press Selection & Delete -->
+    <string name="selection_count_format">%1$d selected</string>
+    <string name="selection_select_all">Select all</string>
+    <string name="selection_delete_action">Delete</string>
+    <string name="selection_clear_desc">Cancel selection</string>
+    <string name="selection_deleted_notes_message">Deleted %1$d selected notes</string>
+    <string name="selection_trashed_notes_message">Moved %1$d selected notes to Trash</string>
+    <string name="note_selected_desc">Selected note</string>
+    <string name="canvas_quick_delete_label">Delete</string>
 </resources>

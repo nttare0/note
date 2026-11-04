@@ -361,4 +361,167 @@ class ExampleUnitTest {
         assertEquals(80f, redone.first.images.first().canvasXDp, 0.01f)
         assertEquals(30f, redone.first.images.first().rotationDeg, 0.01f)
     }
+
+    @Test
+    fun `stylus pressure engine normalizes hardware ranges and scales stroke thickness monotonically`() {
+        // Custom hardware axis range [0.2 .. 1.0]: midpoint 0.6 -> 0.5 normalized
+        val normalizedMid = com.example.util.StrokePressureEngine.normalizeStylusPressure(
+            rawPressure = 0.6f,
+            minPressure = 0.2f,
+            maxPressure = 1.0f
+        )
+        assertEquals(0.5f, normalizedMid, 0.005f)
+
+        val baseWidth = 4.0f
+        val lightWidth = com.example.util.StrokePressureEngine.computePointWidthDp(
+            baseWidthDp = baseWidth,
+            pressure = 0.10f,
+            isHighlighter = false,
+            pressureEnabled = true
+        )
+        val mediumWidth = com.example.util.StrokePressureEngine.computePointWidthDp(
+            baseWidthDp = baseWidth,
+            pressure = 0.58f,
+            isHighlighter = false,
+            pressureEnabled = true
+        )
+        val firmWidth = com.example.util.StrokePressureEngine.computePointWidthDp(
+            baseWidthDp = baseWidth,
+            pressure = 1.00f,
+            isHighlighter = false,
+            pressureEnabled = true
+        )
+        val disabledWidth = com.example.util.StrokePressureEngine.computePointWidthDp(
+            baseWidthDp = baseWidth,
+            pressure = 0.10f,
+            isHighlighter = false,
+            pressureEnabled = false
+        )
+
+        assertTrue("Light stylus pressure should narrow stroke", lightWidth < baseWidth * 0.65f)
+        assertTrue("Medium pressure should stay near nominal width", mediumWidth in (baseWidth * 0.85f)..(baseWidth * 1.12f))
+        assertTrue("Firm stylus pressure should thicken stroke", firmWidth > mediumWidth * 1.25f)
+        assertEquals(baseWidth, disabledWidth, 0.001f)
+    }
+
+    @Test
+    fun `variable-width spine interpolates tapered radii and bitangent quads wind clockwise`() {
+        val uniformTouchPoints = listOf(
+            StrokePoint(10f, 20f, pressure = 1.0f),
+            StrokePoint(50f, 20f, pressure = 1.0f)
+        )
+        assertFalse(
+            com.example.util.StrokePressureEngine.hasVariablePressure(
+                points = uniformTouchPoints,
+                isStylusStroke = false
+            )
+        )
+        assertTrue(
+            com.example.util.StrokePressureEngine.hasVariablePressure(
+                points = uniformTouchPoints,
+                isStylusStroke = true
+            )
+        )
+
+        val calligraphicPoints = listOf(
+            StrokePoint(0f, 50f, pressure = 0.10f),
+            StrokePoint(60f, 50f, pressure = 0.98f),
+            StrokePoint(120f, 50f, pressure = 0.12f)
+        )
+        assertTrue(com.example.util.StrokePressureEngine.hasVariablePressure(calligraphicPoints))
+
+        val spine = com.example.util.StrokePressureEngine.buildVariableWidthSpine(
+            points = calligraphicPoints,
+            baseWidthDp = 4.0f,
+            isHighlighter = false,
+            maxStepDp = 2.0f
+        )
+        assertTrue(spine.size >= 10)
+        val startRadius = spine.first().radiusDp
+        val peakRadius = spine.maxOf { it.radiusDp }
+        val endRadius = spine.last().radiusDp
+        assertTrue("Peak radius should exceed tapered entry/exit radii", peakRadius > startRadius * 1.8f)
+        assertTrue("Peak radius should exceed tapered exit radius", peakRadius > endRadius * 1.8f)
+
+        // Verify clockwise screen-space winding (+cross product) on tapered bitangent quad
+        val quad = com.example.util.StrokePressureEngine.computeBitangentQuad(
+            x0 = 10f,
+            y0 = 20f,
+            r0 = 4f,
+            x1 = 22f,
+            y1 = 20f,
+            r1 = 1.5f
+        )!!
+        val e0x = quad.x1 - quad.x0
+        val e0y = quad.y1 - quad.y0
+        val e1x = quad.x2 - quad.x1
+        val e1y = quad.y2 - quad.y1
+        val crossZ = e0x * e1y - e0y * e1x
+        assertTrue("Bitangent quad must have positive clockwise winding in screen space", crossZ > 0f)
+
+        // Verify isStylus round-trips cleanly through NoteSerializer
+        val encoded = NoteSerializer.encodeStrokes(
+            listOf(InkStroke("st_1", calligraphicPoints, "INK", 4.0f, isStylus = true))
+        )
+        val decoded = NoteSerializer.decodeStrokes(encoded)
+        assertTrue(decoded.first().isStylus)
+    }
+
+    @Test
+    fun `custom ink palette helper normalizes hex keys, parses ARGB, and round-trips HSV`() {
+        assertEquals("#7048E8", com.example.util.InkPaletteHelper.normalizeHexColorKey("7048e8"))
+        assertEquals("#AABBCC", com.example.util.InkPaletteHelper.normalizeHexColorKey("#abc"))
+        assertNull(com.example.util.InkPaletteHelper.normalizeHexColorKey("INK"))
+        assertNull(com.example.util.InkPaletteHelper.normalizeHexColorKey("#12G45Z"))
+
+        val argb = com.example.util.InkPaletteHelper.parseHexRgbToArgbInt("#7048E8")!!
+        assertEquals(0xFF7048E8.toInt(), argb)
+
+        val hsv = com.example.util.InkPaletteHelper.hexKeyToHsv("#0CA678")!!
+        val roundTripHex = com.example.util.InkPaletteHelper.hsvToHexKey(hsv.first, hsv.second, hsv.third)
+        assertEquals("#0CA678", roundTripHex)
+    }
+
+    @Test
+    fun `long-press element hit-testing finds stroke midpoints and reverts deletion via undo and redo`() {
+        // Long stroke with only 2 widely spaced endpoints: midpoint (100, 40) must still be hit via segment projection
+        val wideSegmentStroke = InkStroke(
+            id = "long_line",
+            points = listOf(StrokePoint(20f, 40f), StrokePoint(180f, 40f)),
+            colorKey = "#7048E8",
+            widthDp = 3.4f
+        )
+        val hitMid = com.example.util.LassoSelectionEngine.findElementAtPoint(
+            xDp = 100f,
+            yDp = 44f,
+            strokes = listOf(wideSegmentStroke),
+            images = emptyList()
+        )
+        assertEquals(setOf("long_line"), hitMid.selectedStrokeIds)
+
+        val missFar = com.example.util.LassoSelectionEngine.findElementAtPoint(
+            xDp = 100f,
+            yDp = 120f,
+            strokes = listOf(wideSegmentStroke),
+            images = emptyList()
+        )
+        assertTrue(missFar.isEmpty)
+
+        // Simulate deleting the selected stroke and verifying UndoCount / RedoCount restoration
+        var history = CanvasHistoryStack()
+        var strokes = listOf(wideSegmentStroke)
+        history = history.recordBeforeChange(strokes)
+        strokes = strokes.filterNot { it.id in hitMid.selectedStrokeIds }
+        assertTrue(strokes.isEmpty())
+        assertEquals(1, history.undoCount)
+        assertEquals(0, history.redoCount)
+
+        val undone = history.undoState(strokes)!!
+        strokes = undone.first.strokes
+        history = undone.second
+        assertEquals(1, strokes.size)
+        assertEquals("#7048E8", strokes.first().colorKey)
+        assertEquals(0, history.undoCount)
+        assertEquals(1, history.redoCount)
+    }
 }

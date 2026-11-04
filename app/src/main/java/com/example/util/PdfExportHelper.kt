@@ -39,7 +39,7 @@ object PdfExportHelper {
 
             // Background
             val bgPaint = Paint().apply {
-                color = Color.parseColor("#FAFAFA")
+                color = Color.parseColor("#F8F9FA")
                 style = Paint.Style.FILL
             }
             canvas.drawRect(0f, 0f, pageWidth.toFloat(), pageHeight.toFloat(), bgPaint)
@@ -49,7 +49,7 @@ object PdfExportHelper {
 
             // Title
             val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#18181B")
+                color = Color.parseColor("#121212")
                 textSize = 22f
                 typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
             }
@@ -60,7 +60,7 @@ object PdfExportHelper {
 
             // Body text wrapped manually
             val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#27272A")
+                color = Color.parseColor("#1E1E24")
                 textSize = 13f
                 typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
             }
@@ -119,7 +119,7 @@ object PdfExportHelper {
                     strokeWidth = 1.4f
                 }
                 val checkedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.parseColor("#E86A17")
+                    color = Color.parseColor("#6965DB")
                     style = Paint.Style.FILL
                 }
                 checklist.forEach { item ->
@@ -134,29 +134,88 @@ object PdfExportHelper {
                 cursorY += 12f
             }
 
-            // Vector Ink Strokes
+            // Vector Ink Strokes (preserving stylus pressure variable line thickness)
             if (strokes.isNotEmpty()) {
                 val offsetY = cursorY.coerceAtMost(480f)
                 strokes.forEach { stroke ->
                     if (stroke.points.isNotEmpty()) {
-                        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = resolveAndroidColor(stroke.colorKey, stroke.isHighlighter)
-                            style = Paint.Style.STROKE
-                            strokeWidth = stroke.widthDp * 1.4f
-                            strokeCap = Paint.Cap.ROUND
-                            strokeJoin = Paint.Join.ROUND
+                        val inkColor = resolveAndroidColor(stroke.colorKey, stroke.isHighlighter)
+                        val useVariablePressure = StrokePressureEngine.hasVariablePressure(
+                            points = stroke.points,
+                            isStylusStroke = stroke.isStylus
+                        )
+                        if (useVariablePressure) {
+                            val spine = StrokePressureEngine.buildVariableWidthSpine(
+                                points = stroke.points,
+                                baseWidthDp = stroke.widthDp * 1.4f,
+                                isHighlighter = stroke.isHighlighter,
+                                maxStepDp = 2.0f
+                            )
+                            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color = inkColor
+                                style = Paint.Style.FILL
+                            }
+                            if (spine.size == 1) {
+                                canvas.drawCircle(
+                                    48f + spine[0].xDp,
+                                    offsetY + spine[0].yDp,
+                                    spine[0].radiusDp,
+                                    fillPaint
+                                )
+                            } else if (spine.size > 1) {
+                                val ribbonPath = Path().apply {
+                                    fillType = Path.FillType.WINDING
+                                    var prevX = 48f + spine[0].xDp
+                                    var prevY = offsetY + spine[0].yDp
+                                    var prevR = spine[0].radiusDp
+                                    addCircle(prevX, prevY, prevR, Path.Direction.CW)
+                                    for (i in 1 until spine.size) {
+                                        val curX = 48f + spine[i].xDp
+                                        val curY = offsetY + spine[i].yDp
+                                        val curR = spine[i].radiusDp
+                                        addCircle(curX, curY, curR, Path.Direction.CW)
+                                        val quad = StrokePressureEngine.computeBitangentQuad(
+                                            x0 = prevX,
+                                            y0 = prevY,
+                                            r0 = prevR,
+                                            x1 = curX,
+                                            y1 = curY,
+                                            r1 = curR
+                                        )
+                                        if (quad != null) {
+                                            moveTo(quad.x0, quad.y0)
+                                            lineTo(quad.x1, quad.y1)
+                                            lineTo(quad.x2, quad.y2)
+                                            lineTo(quad.x3, quad.y3)
+                                            close()
+                                        }
+                                        prevX = curX
+                                        prevY = curY
+                                        prevR = curR
+                                    }
+                                }
+                                canvas.drawPath(ribbonPath, fillPaint)
+                            }
+                        } else {
+                            val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color = inkColor
+                                style = Paint.Style.STROKE
+                                strokeWidth = stroke.widthDp * 1.4f
+                                strokeCap = Paint.Cap.ROUND
+                                strokeJoin = Paint.Join.ROUND
+                            }
+                            val path = Path()
+                            val first = stroke.points.first()
+                            path.moveTo(48f + first.x, offsetY + first.y)
+                            for (i in 1 until stroke.points.size) {
+                                val prev = stroke.points[i - 1]
+                                val curr = stroke.points[i]
+                                val midX = 48f + (prev.x + curr.x) / 2f
+                                val midY = offsetY + (prev.y + curr.y) / 2f
+                                path.quadTo(48f + prev.x, offsetY + prev.y, midX, midY)
+                            }
+                            canvas.drawPath(path, strokePaint)
                         }
-                        val path = Path()
-                        val first = stroke.points.first()
-                        path.moveTo(48f + first.x, offsetY + first.y)
-                        for (i in 1 until stroke.points.size) {
-                            val prev = stroke.points[i - 1]
-                            val curr = stroke.points[i]
-                            val midX = 48f + (prev.x + curr.x) / 2f
-                            val midY = offsetY + (prev.y + curr.y) / 2f
-                            path.quadTo(48f + prev.x, offsetY + prev.y, midX, midY)
-                        }
-                        canvas.drawPath(path, strokePaint)
                     }
                 }
             }
@@ -246,13 +305,13 @@ object PdfExportHelper {
     }
 
     private fun resolveAndroidColor(colorKey: String, isHighlighter: Boolean): Int {
-        val base = when (colorKey) {
-            "AMBER" -> Color.parseColor("#E86A17")
-            "SLATE" -> Color.parseColor("#52525B")
-            "BLUE" -> Color.parseColor("#2563EB")
-            "GREEN" -> Color.parseColor("#16A34A")
-            "CORAL" -> Color.parseColor("#DC2626")
-            else -> Color.parseColor("#18181B")
+        val base = InkPaletteHelper.parseHexRgbToArgbInt(colorKey) ?: when (colorKey) {
+            "AMBER" -> Color.parseColor("#6965DB")
+            "SLATE" -> Color.parseColor("#7E706C")
+            "BLUE" -> Color.parseColor("#1971C2")
+            "GREEN" -> Color.parseColor("#2F9E44")
+            "CORAL" -> Color.parseColor("#E03131")
+            else -> Color.parseColor("#121212")
         }
         return if (isHighlighter) {
             Color.argb(88, Color.red(base), Color.green(base), Color.blue(base))

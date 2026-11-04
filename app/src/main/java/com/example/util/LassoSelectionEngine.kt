@@ -93,22 +93,13 @@ object LassoSelectionEngine {
         if (lassoPoints.size < 3 || span < 12f) {
             val tapX = lassoPoints.first().x
             val tapY = lassoPoints.first().y
-
-            val hitImage = images
-                .filter { it.placedOnCanvas }
-                .lastOrNull { img -> isPointInsideRotatedImage(tapX, tapY, img, paddingDp = 6f) }
-            if (hitImage != null) {
-                return LassoHitSelection(selectedImageIds = setOf(hitImage.id))
-            }
-
-            val hitStroke = strokes.lastOrNull { stroke ->
-                stroke.points.any { pt -> hypot(pt.x - tapX, pt.y - tapY) <= max(14f, stroke.widthDp * 2f) }
-            }
-            return if (hitStroke != null) {
-                LassoHitSelection(selectedStrokeIds = setOf(hitStroke.id))
-            } else {
-                LassoHitSelection()
-            }
+            return findElementAtPoint(
+                xDp = tapX,
+                yDp = tapY,
+                strokes = strokes,
+                images = images,
+                hitRadiusDp = 15f
+            )
         }
 
         val hitStrokeIds = strokes.filter { stroke ->
@@ -157,8 +148,21 @@ object LassoSelectionEngine {
 
         strokes.forEach { stroke ->
             if (stroke.id in selection.selectedStrokeIds) {
-                val pad = stroke.widthDp / 2f + 4f
+                val hasVarPressure = StrokePressureEngine.hasVariablePressure(
+                    points = stroke.points,
+                    isStylusStroke = stroke.isStylus
+                )
                 stroke.points.forEach { pt ->
+                    val localW = if (hasVarPressure) {
+                        StrokePressureEngine.computePointWidthDp(
+                            baseWidthDp = stroke.widthDp,
+                            pressure = pt.pressure,
+                            isHighlighter = stroke.isHighlighter
+                        )
+                    } else {
+                        stroke.widthDp
+                    }
+                    val pad = localW / 2f + 4f
                     minX = min(minX, pt.x - pad)
                     minY = min(minY, pt.y - pad)
                     maxX = max(maxX, pt.x + pad)
@@ -317,6 +321,68 @@ object LassoSelectionEngine {
         val hw = img.canvasWidthDp / 2f + paddingDp
         val hh = img.canvasHeightDp / 2f + paddingDp
         return abs(localX) <= hw && abs(localY) <= hh
+    }
+
+    /**
+     * Hit-tests the topmost canvas-placed image or handwriting stroke at ([xDp], [yDp])
+     * using exact point-to-segment distance so long-press or tap anywhere along a stroke selects it.
+     */
+    fun findElementAtPoint(
+        xDp: Float,
+        yDp: Float,
+        strokes: List<InkStroke>,
+        images: List<NoteImageAttachment>,
+        hitRadiusDp: Float = 16f
+    ): LassoHitSelection {
+        val hitImage = images
+            .filter { it.placedOnCanvas }
+            .lastOrNull { img -> isPointInsideRotatedImage(xDp, yDp, img, paddingDp = 6f) }
+        if (hitImage != null) {
+            return LassoHitSelection(selectedImageIds = setOf(hitImage.id))
+        }
+
+        val hitStroke = strokes.lastOrNull { stroke ->
+            if (stroke.points.isEmpty()) return@lastOrNull false
+            val threshold = max(hitRadiusDp, stroke.widthDp * 1.8f)
+            if (stroke.points.size == 1) {
+                val pt = stroke.points.first()
+                hypot(pt.x - xDp, pt.y - yDp) <= threshold
+            } else {
+                var hit = false
+                for (i in 0 until stroke.points.size - 1) {
+                    val p0 = stroke.points[i]
+                    val p1 = stroke.points[i + 1]
+                    if (pointToSegmentDistanceDp(xDp, yDp, p0.x, p0.y, p1.x, p1.y) <= threshold) {
+                        hit = true
+                        break
+                    }
+                }
+                hit
+            }
+        }
+        return if (hitStroke != null) {
+            LassoHitSelection(selectedStrokeIds = setOf(hitStroke.id))
+        } else {
+            LassoHitSelection()
+        }
+    }
+
+    private fun pointToSegmentDistanceDp(
+        px: Float,
+        py: Float,
+        x0: Float,
+        y0: Float,
+        x1: Float,
+        y1: Float
+    ): Float {
+        val vx = x1 - x0
+        val vy = y1 - y0
+        val lenSq = vx * vx + vy * vy
+        if (lenSq < 1e-6f) return hypot(px - x0, py - y0)
+        val t = (((px - x0) * vx + (py - y0) * vy) / lenSq).coerceIn(0f, 1f)
+        val projX = x0 + t * vx
+        val projY = y0 + t * vy
+        return hypot(px - projX, py - projY)
     }
 
     private fun normalizeDegrees(deg: Float): Float {

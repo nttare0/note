@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material.icons.outlined.Widgets
@@ -79,6 +81,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
@@ -117,11 +120,20 @@ fun WorkspaceScreen(
     onOpenNote: (NoteEntity) -> Unit,
     onToggleNoteFavorite: (NoteEntity) -> Unit,
     onMoveNoteToFolder: (NoteEntity, Long?) -> Unit = { _, _ -> },
+    onToggleSelectNote: (Long) -> Unit = {},
+    onSelectNote: (Long) -> Unit = {},
+    onSelectAllNotes: () -> Unit = {},
+    onClearNoteSelection: () -> Unit = {},
+    onDeleteSelectedNotes: ((Int, Boolean) -> Unit) -> Unit = {},
     onPinQuickCaptureWidget: (() -> Boolean)? = null,
     onCreateFolder: (String) -> Unit,
     onDeleteFolder: (Long) -> Unit,
     onEmptyTrash: () -> Unit
 ) {
+    BackHandler(enabled = uiState.selectedNoteIds.isNotEmpty()) {
+        onClearNoteSelection()
+    }
+
     var showCreateFolderDialog by remember { mutableStateOf(false) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -217,6 +229,11 @@ fun WorkspaceScreen(
                     onCreateNote = onCreateNote,
                     onOpenNote = onOpenNote,
                     onToggleNoteFavorite = onToggleNoteFavorite,
+                    onToggleSelectNote = onToggleSelectNote,
+                    onSelectNote = onSelectNote,
+                    onSelectAllNotes = onSelectAllNotes,
+                    onClearNoteSelection = onClearNoteSelection,
+                    onDeleteSelectedNotes = onDeleteSelectedNotes,
                     onEmptyTrash = onEmptyTrash,
                     modifier = Modifier.weight(1f)
                 )
@@ -285,6 +302,11 @@ fun WorkspaceScreen(
                     onCreateNote = onCreateNote,
                     onOpenNote = onOpenNote,
                     onToggleNoteFavorite = onToggleNoteFavorite,
+                    onToggleSelectNote = onToggleSelectNote,
+                    onSelectNote = onSelectNote,
+                    onSelectAllNotes = onSelectAllNotes,
+                    onClearNoteSelection = onClearNoteSelection,
+                    onDeleteSelectedNotes = onDeleteSelectedNotes,
                     onEmptyTrash = onEmptyTrash
                 )
             }
@@ -322,10 +344,18 @@ private fun WorkspaceMainPane(
     onCreateNote: (EditorMode) -> Unit,
     onOpenNote: (NoteEntity) -> Unit,
     onToggleNoteFavorite: (NoteEntity) -> Unit,
+    onToggleSelectNote: (Long) -> Unit,
+    onSelectNote: (Long) -> Unit,
+    onSelectAllNotes: () -> Unit,
+    onClearNoteSelection: () -> Unit,
+    onDeleteSelectedNotes: ((Int, Boolean) -> Unit) -> Unit,
     onEmptyTrash: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val folderMap = remember(uiState.folders) { uiState.folders.associate { it.id to it.name } }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val isSelectionMode = uiState.selectedNoteIds.isNotEmpty()
 
     val headingTitle = when (val f = uiState.activeFilter) {
         NoteFilter.All -> stringResource(R.string.nav_all_notes)
@@ -347,16 +377,21 @@ private fun WorkspaceMainPane(
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            if (uiState.activeFilter != NoteFilter.Trash) {
+            if (uiState.activeFilter != NoteFilter.Trash && !isSelectionMode) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Secondary quick S-Pen Ink button
+                    // Secondary quick S-Pen Ink floating island button
                     IconButton(
                         onClick = { onCreateNote(EditorMode.INK) },
                         modifier = Modifier
                             .size(48.dp)
+                            .shadow(
+                                elevation = 3.dp,
+                                shape = MaterialTheme.shapes.medium,
+                                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                            )
                             .clip(MaterialTheme.shapes.medium)
                             .background(MaterialTheme.colorScheme.surface)
                             .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
@@ -365,7 +400,7 @@ private fun WorkspaceMainPane(
                         Icon(
                             imageVector = Icons.Outlined.Draw,
                             contentDescription = stringResource(R.string.editor_mode_ink),
-                            tint = MaterialTheme.colorScheme.onSurface,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -400,7 +435,7 @@ private fun WorkspaceMainPane(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Top Minimalist Header Bar
+            // Top Minimalist Excalidraw Floating Island Header Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -408,19 +443,24 @@ private fun WorkspaceMainPane(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (showMenuButton) {
                         IconButton(
                             onClick = onMenuClick,
                             modifier = Modifier
                                 .size(48.dp)
+                                .shadow(1.5.dp, MaterialTheme.shapes.small)
+                                .clip(MaterialTheme.shapes.small)
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
                                 .testTag("open_drawer_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Menu,
                                 contentDescription = stringResource(R.string.nav_menu_desc),
-                                tint = MaterialTheme.colorScheme.onBackground
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -483,7 +523,35 @@ private fun WorkspaceMainPane(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Animated Long-Press Multi-Select & Batch Delete Bar
+            AnimatedVisibility(
+                visible = isSelectionMode,
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(130))
+            ) {
+                Column {
+                    WorkspaceSelectionActionBar(
+                        selectedCount = uiState.selectedNoteIds.size,
+                        onSelectAll = onSelectAllNotes,
+                        onDeleteSelected = {
+                            onDeleteSelectedNotes { countDeleted, wasPermanent ->
+                                scope.launch {
+                                    val msg = if (wasPermanent) {
+                                        context.getString(R.string.selection_deleted_notes_message, countDeleted)
+                                    } else {
+                                        context.getString(R.string.selection_trashed_notes_message, countDeleted)
+                                    }
+                                    snackbarHostState.showSnackbar(msg)
+                                }
+                            }
+                        },
+                        onClearSelection = onClearNoteSelection
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
 
             // Clean shadcn-style Search Input
             SearchInputBar(
@@ -538,17 +606,36 @@ private fun WorkspaceMainPane(
                         items = uiState.visibleNotes,
                         key = { it.id }
                     ) { note ->
+                        val isCardSelected = note.id in uiState.selectedNoteIds
                         DraggableWorkspaceNoteItem(
                             note = note,
-                            canDrag = !note.isTrashed && uiState.folders.isNotEmpty(),
+                            canDrag = !note.isTrashed && uiState.folders.isNotEmpty() && !isSelectionMode,
                             isBeingDragged = draggingNote?.id == note.id,
+                            isSelected = isCardSelected,
+                            isSelectionMode = isSelectionMode,
                             folderName = note.folderId?.let { folderMap[it] },
                             isDarkTheme = isDarkTheme,
                             dropTargetRects = dropTargetRects,
-                            onStartDrag = { onStartDraggingNote(note) },
+                            onStartDrag = {
+                                onClearNoteSelection()
+                                onStartDraggingNote(note)
+                            },
                             onHoverTarget = onHoverDropTarget,
                             onEndDrag = { hitKey -> onFinishDraggingNote(note, hitKey) },
-                            onClick = { onOpenNote(note) },
+                            onClick = {
+                                if (isSelectionMode) {
+                                    onToggleSelectNote(note.id)
+                                } else {
+                                    onOpenNote(note)
+                                }
+                            },
+                            onLongSelect = {
+                                if (isSelectionMode) {
+                                    onToggleSelectNote(note.id)
+                                } else {
+                                    onSelectNote(note.id)
+                                }
+                            },
                             onToggleFavorite = { onToggleNoteFavorite(note) }
                         )
                     }
@@ -559,10 +646,116 @@ private fun WorkspaceMainPane(
 }
 
 @Composable
+private fun WorkspaceSelectionActionBar(
+    selectedCount: Int,
+    onSelectAll: () -> Unit,
+    onDeleteSelected: () -> Unit,
+    onClearSelection: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 3.dp,
+                shape = MaterialTheme.shapes.medium,
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+            )
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.5.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .testTag("workspace_selection_bar")
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            IconButton(
+                onClick = onClearSelection,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("workspace_clear_selection_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.selection_clear_desc),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Text(
+                text = stringResource(R.string.selection_count_format, selectedCount),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier
+                    .height(48.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.background)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
+                    .clickable(onClick = onSelectAll)
+                    .padding(horizontal = 12.dp)
+                    .testTag("workspace_select_all_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.SelectAll,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = stringResource(R.string.selection_select_all),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier
+                    .height(48.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f))
+                    .border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small)
+                    .clickable(onClick = onDeleteSelected)
+                    .padding(horizontal = 12.dp)
+                    .testTag("workspace_delete_selected_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DeleteOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = stringResource(R.string.selection_delete_action),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DraggableWorkspaceNoteItem(
     note: NoteEntity,
     canDrag: Boolean,
     isBeingDragged: Boolean,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
     folderName: String?,
     isDarkTheme: Boolean,
     dropTargetRects: Map<Long, Rect>,
@@ -570,45 +763,57 @@ private fun DraggableWorkspaceNoteItem(
     onHoverTarget: (Long?) -> Unit,
     onEndDrag: (Long?) -> Unit,
     onClick: () -> Unit,
+    onLongSelect: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
     var cardRootOrigin by remember { mutableStateOf(Offset.Zero) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var activeHitKey by remember { mutableStateOf<Long?>(null) }
+    var enteredFolderDrag by remember { mutableStateOf(false) }
 
     val dragGestureModifier = if (canDrag) {
         Modifier.pointerInput(note.id, dropTargetRects) {
             detectDragGesturesAfterLongPress(
-                onDragStart = { startLocal ->
+                onDragStart = {
                     dragOffset = Offset.Zero
                     activeHitKey = null
-                    onStartDrag()
-                    val pointerInRoot = cardRootOrigin + startLocal
-                    val hit = dropTargetRects.entries.firstOrNull { it.value.contains(pointerInRoot) }?.key
-                    activeHitKey = hit
-                    onHoverTarget(hit)
+                    enteredFolderDrag = false
+                    // Immediately select note on stationary long-press; if user drags further, transition to folder drag
+                    onLongSelect()
                 },
                 onDragCancel = {
+                    val wasFolderDrag = enteredFolderDrag
                     dragOffset = Offset.Zero
                     activeHitKey = null
-                    onEndDrag(null)
+                    enteredFolderDrag = false
+                    if (wasFolderDrag) {
+                        onEndDrag(null)
+                    }
                 },
                 onDragEnd = {
+                    val wasFolderDrag = enteredFolderDrag
                     val droppedKey = activeHitKey
                     dragOffset = Offset.Zero
                     activeHitKey = null
-                    onEndDrag(droppedKey)
+                    enteredFolderDrag = false
+                    if (wasFolderDrag) {
+                        onEndDrag(droppedKey)
+                    }
                 },
                 onDrag = { change, dragAmount ->
                     change.consume()
                     dragOffset += dragAmount
-                    // Card itself translates by dragOffset, so change.position inside the translated card
-                    // maps to root coordinate = cardRootOrigin + dragOffset + change.position
-                    val pointerInRoot = cardRootOrigin + dragOffset + change.position
-                    val hit = dropTargetRects.entries.firstOrNull { it.value.contains(pointerInRoot) }?.key
-                    if (hit != activeHitKey) {
-                        activeHitKey = hit
-                        onHoverTarget(hit)
+                    if (!enteredFolderDrag && dragOffset.getDistance() >= 20f) {
+                        enteredFolderDrag = true
+                        onStartDrag()
+                    }
+                    if (enteredFolderDrag) {
+                        val pointerInRoot = cardRootOrigin + dragOffset + change.position
+                        val hit = dropTargetRects.entries.firstOrNull { it.value.contains(pointerInRoot) }?.key
+                        if (hit != activeHitKey) {
+                            activeHitKey = hit
+                            onHoverTarget(hit)
+                        }
                     }
                 }
             )
@@ -621,7 +826,10 @@ private fun DraggableWorkspaceNoteItem(
         note = note,
         folderName = folderName,
         isDarkTheme = isDarkTheme,
+        isSelected = isSelected,
+        isSelectionMode = isSelectionMode,
         onClick = onClick,
+        onLongClick = if (!canDrag) onLongSelect else null,
         onToggleFavorite = onToggleFavorite,
         modifier = Modifier
             .onGloballyPositioned { coords ->
@@ -782,6 +990,12 @@ private fun SearchInputBar(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
+            .shadow(
+                elevation = 2.dp,
+                shape = MaterialTheme.shapes.medium,
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                spotColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.07f)
+            )
             .clip(MaterialTheme.shapes.medium)
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
@@ -790,7 +1004,7 @@ private fun SearchInputBar(
         Icon(
             imageVector = Icons.Outlined.Search,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(18.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
@@ -847,12 +1061,32 @@ private fun SidebarContent(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 24.dp)
     ) {
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.padding(horizontal = 8.dp)
-        )
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .border(1.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.small)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Draw,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -1092,12 +1326,13 @@ private fun EmptyWorkspaceView(
                 .padding(24.dp)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.img_empty_notebook_1793654195205),
+                painter = painterResource(id = R.drawable.img_excalidraw_empty_1793811079426),
                 contentDescription = stringResource(R.string.empty_illustration_desc),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(168.dp)
+                    .height(172.dp)
+                    .shadow(2.dp, MaterialTheme.shapes.medium)
                     .clip(MaterialTheme.shapes.medium)
                     .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
             )
@@ -1115,7 +1350,7 @@ private fun EmptyWorkspaceView(
             )
             if (!hasSearchQuery && filter != NoteFilter.Trash && filter != NoteFilter.Favorites) {
                 Spacer(modifier = Modifier.height(20.dp))
-                OutlinedButton(
+                Button(
                     onClick = onCreateNote,
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier.testTag("empty_create_note_button")

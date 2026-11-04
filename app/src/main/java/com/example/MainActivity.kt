@@ -103,6 +103,7 @@ fun NoteStudioApp(
                 NoteEditorScreen(
                     editorState = currentEditor,
                     folders = uiState.folders,
+                    customInkColors = uiState.customInkColors,
                     isDarkTheme = effectiveDark,
                     onBack = viewModel::saveAndCloseEditor,
                     onTitleChange = viewModel::updateEditorTitle,
@@ -125,12 +126,15 @@ fun NoteStudioApp(
                     onReorderChecklistItems = viewModel::reorderChecklistItems,
                     onSelectInkTool = viewModel::selectInkTool,
                     onSelectInkColor = viewModel::selectInkColor,
+                    onAddCustomInkColor = viewModel::addCustomInkColor,
+                    onRemoveCustomInkColor = viewModel::removeCustomInkColor,
                     onSelectStrokeWidth = viewModel::selectStrokeWidth,
                     onCommitStroke = viewModel::commitInkStroke,
                     onEraseSegmentSweep = viewModel::eraseStrokeSegments,
                     onEraseGestureStart = viewModel::beginEraseGesture,
                     onEraseGestureEnd = viewModel::endEraseGesture,
                     onCompleteLassoSelection = viewModel::completeLassoSelection,
+                    onLongPressSelectCanvasElement = viewModel::selectCanvasElementAtPoint,
                     onClearLassoSelection = viewModel::clearLassoSelection,
                     onLassoTransformStart = viewModel::beginLassoTransformGesture,
                     onLassoTransformDelta = viewModel::applyLassoTransformDelta,
@@ -141,6 +145,7 @@ fun NoteStudioApp(
                     onRedoStroke = viewModel::redoStroke,
                     onClearCanvas = viewModel::clearCanvas,
                     onToggleCanvasGrid = viewModel::toggleCanvasGridBackground,
+                    onTogglePressureSensitivity = viewModel::togglePressureSensitivity,
                     onSaveCanvasPng = { callback ->
                         viewModel.exportCanvasAsPngToGallery(context, effectiveDark, callback)
                     },
@@ -164,6 +169,11 @@ fun NoteStudioApp(
                     onOpenNote = viewModel::openExistingNote,
                     onToggleNoteFavorite = viewModel::toggleNoteFavoriteFromList,
                     onMoveNoteToFolder = viewModel::moveNoteToFolderFromWorkspace,
+                    onToggleSelectNote = viewModel::toggleNoteSelection,
+                    onSelectNote = viewModel::selectNote,
+                    onSelectAllNotes = viewModel::selectAllVisibleNotes,
+                    onClearNoteSelection = viewModel::clearNoteSelection,
+                    onDeleteSelectedNotes = { callback -> viewModel.deleteSelectedNotes(callback) },
                     onPinQuickCaptureWidget = {
                         NoteWidgetHelper.requestPinQuickCaptureWidget(context)
                     },

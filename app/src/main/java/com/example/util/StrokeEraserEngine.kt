@@ -42,11 +42,26 @@ object StrokeEraserEngine {
                 continue
             }
 
-            val effectiveRadius = eraserRadiusDp + (stroke.widthDp * 0.45f)
-            val radiusSq = effectiveRadius * effectiveRadius
+            val hasVarPressure = StrokePressureEngine.hasVariablePressure(
+                points = stroke.points,
+                isStylusStroke = stroke.isStylus
+            )
+            val maxPossibleHalfWidth = if (hasVarPressure) {
+                stroke.widthDp * StrokePressureEngine.MAX_PEN_WIDTH_SCALE * 0.5f
+            } else {
+                stroke.widthDp * 0.45f
+            }
 
             // Fast bounding-box rejection before densifying points
-            if (!sweepIntersectsBoundingBox(stroke.points, fromXDp, fromYDp, toXDp, toYDp, effectiveRadius)) {
+            if (!sweepIntersectsBoundingBox(
+                    stroke.points,
+                    fromXDp,
+                    fromYDp,
+                    toXDp,
+                    toYDp,
+                    eraserRadiusDp + maxPossibleHalfWidth
+                )
+            ) {
                 result.add(stroke)
                 continue
             }
@@ -58,6 +73,17 @@ object StrokeEraserEngine {
             var currentRun: MutableList<StrokePoint>? = null
 
             for (pt in densePoints) {
+                val localWidthDp = if (hasVarPressure) {
+                    StrokePressureEngine.computePointWidthDp(
+                        baseWidthDp = stroke.widthDp,
+                        pressure = pt.pressure,
+                        isHighlighter = stroke.isHighlighter
+                    )
+                } else {
+                    stroke.widthDp
+                }
+                val effectiveRadius = eraserRadiusDp + (localWidthDp * 0.45f)
+                val radiusSq = effectiveRadius * effectiveRadius
                 val distSq = distancePointToSegmentSq(
                     px = pt.x,
                     py = pt.y,

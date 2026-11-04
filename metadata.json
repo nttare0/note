@@ -1,6 +1,6 @@
 {
   "name": "NoteStudio",
-  "description": "A clean, minimal digital notebook inspired by Samsung Notes with handwriting canvas, structured notes, folders, and cloud sync.",
+  "description": "A clean, minimal digital notebook with pressure-sensitive handwriting, customizable ink palettes, undo/redo history, long-press selection, and SQLite persistence.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

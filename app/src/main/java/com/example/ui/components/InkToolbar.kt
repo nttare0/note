@@ -6,9 +6,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Gesture
 import androidx.compose.material.icons.outlined.GridOff
 import androidx.compose.material.icons.outlined.GridOn
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.RotateLeft
 import androidx.compose.material.icons.outlined.RotateRight
 import androidx.compose.material.icons.outlined.ZoomIn
@@ -45,9 +48,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -60,14 +68,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.InkTool
+import com.example.data.StrokePoint
+import com.example.util.InkPaletteHelper
 import kotlin.math.abs
-
-private val PaletteKeys = listOf("INK", "AMBER", "SLATE", "BLUE", "GREEN", "CORAL")
 
 /**
  * Clean, minimal drawing canvas toolbar allowing users to toggle between Pen, Marker, Eraser,
- * and Lasso Selection modes, transform selected handwriting or canvas images, switch pen colors,
- * adjust line thickness, undo/redo strokes, and save the canvas as a PNG to the device gallery.
+ * and Lasso Selection modes, customize their ink color palette, adjust line thickness and stylus
+ * pressure, undo/redo canvas actions cleanly, and save the canvas as a PNG to the device gallery.
  */
 @Composable
 fun DrawingCanvasToolbar(
@@ -76,17 +84,24 @@ fun DrawingCanvasToolbar(
     activeStrokeWidth: Float,
     canUndo: Boolean,
     canRedo: Boolean,
+    undoCount: Int = 0,
+    redoCount: Int = 0,
     canClear: Boolean = canUndo,
+    customColorKeys: List<String> = emptyList(),
     isGridEnabled: Boolean = false,
+    isPressureSensitive: Boolean = true,
     lassoSelectedCount: Int = 0,
     isDarkTheme: Boolean,
     onSelectTool: (InkTool) -> Unit,
     onSelectColor: (String) -> Unit,
+    onAddCustomColor: ((String) -> Unit)? = null,
+    onRemoveCustomColor: ((String) -> Unit)? = null,
     onSelectWidth: (Float) -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onClear: () -> Unit,
     onToggleGrid: (() -> Unit)? = null,
+    onTogglePressureSensitivity: (() -> Unit)? = null,
     onSavePng: (() -> Unit)? = null,
     onRotateSelectionLeft: (() -> Unit)? = null,
     onRotateSelectionRight: (() -> Unit)? = null,
@@ -97,16 +112,24 @@ fun DrawingCanvasToolbar(
     onAddCanvasImage: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var showColorPickerDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 4.dp,
+                shape = MaterialTheme.shapes.large,
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                spotColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.10f)
+            )
             .clip(MaterialTheme.shapes.large)
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.large)
             .padding(horizontal = 12.dp, vertical = 10.dp)
             .testTag("drawing_canvas_toolbar")
     ) {
-        // Top Row: Mode Switcher (Pen | Marker | Eraser | Lasso) + Grid / Undo / Redo / Save PNG / Clear
+        // Top Row: Mode Switcher (Pen | Marker | Eraser | Lasso) + Island Divider + Undo/Redo & Actions
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -148,10 +171,17 @@ fun DrawingCanvasToolbar(
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(26.dp)
+                    .background(MaterialTheme.colorScheme.outline)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (onToggleGrid != null) {
@@ -159,39 +189,26 @@ fun DrawingCanvasToolbar(
                         isGridEnabled = isGridEnabled,
                         onToggleGrid = onToggleGrid
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
                 }
-                IconButton(
-                    onClick = onUndo,
-                    enabled = canUndo,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("ink_undo_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.Undo,
-                        contentDescription = stringResource(R.string.tool_undo_desc),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(
-                    onClick = onRedo,
-                    enabled = canRedo,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("ink_redo_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.Redo,
-                        contentDescription = stringResource(R.string.tool_redo_desc),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+
+                // Minimal Excalidraw Undo / Redo History Island
+                UndoRedoHistoryIsland(
+                    canUndo = canUndo,
+                    canRedo = canRedo,
+                    undoCount = undoCount,
+                    redoCount = redoCount,
+                    onUndo = onUndo,
+                    onRedo = onRedo
+                )
+
                 if (onSavePng != null) {
                     IconButton(
                         onClick = onSavePng,
                         modifier = Modifier
                             .size(48.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(MaterialTheme.colorScheme.background)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
                             .testTag("ink_export_png_button")
                     ) {
                         Icon(
@@ -207,6 +224,9 @@ fun DrawingCanvasToolbar(
                     enabled = canClear,
                     modifier = Modifier
                         .size(48.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .background(MaterialTheme.colorScheme.background)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
                         .testTag("ink_clear_button")
                 ) {
                     Icon(
@@ -220,7 +240,7 @@ fun DrawingCanvasToolbar(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Bottom Row: Contextual controls (Pen/Marker Swatches, Eraser Radii, or Lasso Transform Bar)
+        // Bottom Row: Contextual controls (Pen/Marker Swatches + Custom Palette, Eraser Radii, or Lasso Bar)
         AnimatedContent(
             targetState = activeTool,
             transitionSpec = {
@@ -238,6 +258,11 @@ fun DrawingCanvasToolbar(
                 InkTool.LASSO -> {
                     LassoControlsRow(
                         selectedCount = lassoSelectedCount,
+                        activeColorKey = activeColorKey,
+                        customColorKeys = customColorKeys,
+                        isDarkTheme = isDarkTheme,
+                        onSelectColor = onSelectColor,
+                        onOpenColorPicker = { showColorPickerDialog = true },
                         onRotateLeft = onRotateSelectionLeft,
                         onRotateRight = onRotateSelectionRight,
                         onScaleDown = onScaleSelectionDown,
@@ -251,27 +276,148 @@ fun DrawingCanvasToolbar(
                     ColorAndThicknessRow(
                         activeTool = currentTool,
                         activeColorKey = activeColorKey,
+                        customColorKeys = customColorKeys,
                         activeStrokeWidth = activeStrokeWidth,
+                        isPressureSensitive = isPressureSensitive,
                         isDarkTheme = isDarkTheme,
                         onSelectColor = onSelectColor,
-                        onSelectWidth = onSelectWidth
+                        onRemoveCustomColor = onRemoveCustomColor,
+                        onOpenColorPicker = { showColorPickerDialog = true },
+                        onSelectWidth = onSelectWidth,
+                        onTogglePressureSensitivity = onTogglePressureSensitivity
                     )
                 }
             }
         }
     }
+
+    if (showColorPickerDialog) {
+        InkColorPickerDialog(
+            initialColorKey = activeColorKey,
+            savedCustomColors = customColorKeys,
+            onConfirmCustomColor = { chosenHex ->
+                onAddCustomColor?.invoke(chosenHex)
+                onSelectColor(chosenHex)
+                showColorPickerDialog = false
+            },
+            onRemoveCustomColor = onRemoveCustomColor,
+            onDismiss = { showColorPickerDialog = false }
+        )
+    }
 }
 
+@Composable
+private fun UndoRedoHistoryIsland(
+    canUndo: Boolean,
+    canRedo: Boolean,
+    undoCount: Int,
+    redoCount: Int,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit
+) {
+    val undoDesc = stringResource(R.string.tool_undo_desc)
+    val redoDesc = stringResource(R.string.tool_redo_desc)
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .height(48.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.background)
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
+            .testTag("undo_redo_island")
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .height(48.dp)
+                .clickable(enabled = canUndo, onClick = onUndo)
+                .padding(horizontal = 12.dp)
+                .semantics { contentDescription = undoDesc }
+                .testTag("ink_undo_button")
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.Undo,
+                contentDescription = null,
+                tint = if (canUndo) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                },
+                modifier = Modifier.size(18.dp)
+            )
+            if (undoCount > 0) {
+                Text(
+                    text = undoCount.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .width(1.dp)
+                .height(22.dp)
+                .background(MaterialTheme.colorScheme.outline)
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .height(48.dp)
+                .clickable(enabled = canRedo, onClick = onRedo)
+                .padding(horizontal = 12.dp)
+                .semantics { contentDescription = redoDesc }
+                .testTag("ink_redo_button")
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.Redo,
+                contentDescription = null,
+                tint = if (canRedo) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                },
+                modifier = Modifier.size(18.dp)
+            )
+            if (redoCount > 0) {
+                Text(
+                    text = redoCount.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ColorAndThicknessRow(
     activeTool: InkTool,
     activeColorKey: String,
+    customColorKeys: List<String>,
     activeStrokeWidth: Float,
+    isPressureSensitive: Boolean,
     isDarkTheme: Boolean,
     onSelectColor: (String) -> Unit,
-    onSelectWidth: (Float) -> Unit
+    onRemoveCustomColor: ((String) -> Unit)?,
+    onOpenColorPicker: () -> Unit,
+    onSelectWidth: (Float) -> Unit,
+    onTogglePressureSensitivity: (() -> Unit)?
 ) {
     val activeInkColor = resolveInkColor(activeColorKey, isDarkTheme)
+    val allPaletteKeys = remember(customColorKeys, activeColorKey) {
+        val base = InkPaletteHelper.DEFAULT_PALETTE_KEYS + customColorKeys
+        if (activeColorKey !in base && InkPaletteHelper.isCustomHexKey(activeColorKey)) {
+            base + activeColorKey
+        } else {
+            base.distinct()
+        }
+    }
 
     Row(
         modifier = Modifier
@@ -280,39 +426,90 @@ private fun ColorAndThicknessRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Color Swatch Toggles (48dp accessible touch targets)
+        // Color Swatch Toggles + Customizable Palette Button (48dp accessible touch targets)
         Row(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            PaletteKeys.forEach { key ->
+            allPaletteKeys.forEach { key ->
                 val swatchColor = resolveInkColor(key, isDarkTheme)
-                val isSelected = key == activeColorKey
+                val isSelected = key.equals(activeColorKey, ignoreCase = true)
+                val isCustom = InkPaletteHelper.isCustomHexKey(key)
                 val desc = stringResource(R.string.color_swatch_desc, key.lowercase())
+                val tagSuffix = key.removePrefix("#")
 
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .clickable { onSelectColor(key) }
+                        .combinedClickable(
+                            onClick = { onSelectColor(key) },
+                            onLongClick = if (isCustom && onRemoveCustomColor != null) {
+                                { onRemoveCustomColor(key) }
+                            } else {
+                                null
+                            }
+                        )
                         .semantics { contentDescription = desc }
-                        .testTag("ink_color_$key")
+                        .testTag("ink_color_$tagSuffix")
                 ) {
                     Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(if (isSelected) 26.dp else 20.dp)
-                            .clip(CircleShape)
-                            .background(swatchColor)
-                            .border(
-                                width = if (isSelected) 2.5.dp else 1.dp,
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.onSurface
+                            .size(if (isSelected) 30.dp else 22.dp)
+                            .then(
+                                if (isSelected) {
+                                    Modifier.border(
+                                        width = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        shape = CircleShape
+                                    )
                                 } else {
-                                    MaterialTheme.colorScheme.outline
-                                },
-                                shape = CircleShape
+                                    Modifier
+                                }
                             )
+                            .padding(if (isSelected) 3.dp else 0.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(swatchColor)
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    shape = CircleShape
+                                )
+                        )
+                    }
+                }
+            }
+
+            // Minimal Customize Color Palette Trigger Button
+            val customizeDesc = stringResource(R.string.palette_customize_desc)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onOpenColorPicker)
+                    .semantics { contentDescription = customizeDesc }
+                    .testTag("open_color_palette_picker_button")
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.background)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Palette,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }
@@ -320,7 +517,7 @@ private fun ColorAndThicknessRow(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Line Thickness Toggles with visual stroke preview
+        // Line Thickness Toggles with visual stroke preview + Stylus Pressure Toggle
         val presets = if (activeTool == InkTool.MARKER) {
             listOf(
                 10f to R.string.stroke_fine,
@@ -351,12 +548,12 @@ private fun ColorAndThicknessRow(
                         .height(48.dp)
                         .clip(MaterialTheme.shapes.small)
                         .background(
-                            if (selected) MaterialTheme.colorScheme.secondaryContainer
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
                             else MaterialTheme.colorScheme.background
                         )
                         .border(
                             width = 1.dp,
-                            color = if (selected) MaterialTheme.colorScheme.onSurface
+                            color = if (selected) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.outline,
                             shape = MaterialTheme.shapes.small
                         )
@@ -368,14 +565,23 @@ private fun ColorAndThicknessRow(
                     ThicknessPreviewIndicator(
                         strokeWidthDp = widthVal,
                         isHighlighter = activeTool == InkTool.MARKER,
+                        isPressureSensitive = isPressureSensitive,
                         color = activeInkColor
                     )
                     Text(
                         text = labelText,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface
                     )
                 }
+            }
+
+            if (onTogglePressureSensitivity != null) {
+                PressureSensitivityTogglePill(
+                    isPressureSensitive = isPressureSensitive,
+                    onToggle = onTogglePressureSensitivity
+                )
             }
         }
     }
@@ -385,20 +591,94 @@ private fun ColorAndThicknessRow(
 private fun ThicknessPreviewIndicator(
     strokeWidthDp: Float,
     isHighlighter: Boolean,
+    isPressureSensitive: Boolean,
     color: Color
 ) {
     val previewStroke = if (isHighlighter) {
         (strokeWidthDp * 0.42f).coerceIn(3f, 10f)
     } else {
-        strokeWidthDp.coerceIn(1.8f, 7f)
+        strokeWidthDp.coerceIn(1.8f, 6.2f)
     }
-    Canvas(modifier = Modifier.size(width = 16.dp, height = 14.dp)) {
-        drawLine(
-            color = if (isHighlighter) color.copy(alpha = 0.55f) else color,
-            start = Offset(2.dp.toPx(), size.height / 2f),
-            end = Offset(size.width - 2.dp.toPx(), size.height / 2f),
-            strokeWidth = previewStroke.dp.toPx(),
-            cap = StrokeCap.Round
+    Canvas(modifier = Modifier.size(width = 18.dp, height = 14.dp)) {
+        if (isPressureSensitive && !isHighlighter) {
+            drawSmoothStroke(
+                points = listOf(
+                    StrokePoint(x = 2f, y = 10.5f, pressure = 0.14f),
+                    StrokePoint(x = 9f, y = 4.0f, pressure = 0.92f),
+                    StrokePoint(x = 16f, y = 9.0f, pressure = 0.16f)
+                ),
+                color = color,
+                widthDp = previewStroke * 0.85f,
+                isHighlighter = false,
+                isStylus = true
+            )
+        } else {
+            drawLine(
+                color = if (isHighlighter) color.copy(alpha = 0.55f) else color,
+                start = Offset(2.dp.toPx(), size.height / 2f),
+                end = Offset(size.width - 2.dp.toPx(), size.height / 2f),
+                strokeWidth = previewStroke.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
+private fun PressureSensitivityTogglePill(
+    isPressureSensitive: Boolean,
+    onToggle: () -> Unit
+) {
+    val bg = if (isPressureSensitive) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.background
+    }
+    val borderCol = if (isPressureSensitive) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+    val fg = if (isPressureSensitive) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val desc = stringResource(
+        if (isPressureSensitive) R.string.tool_pressure_disable_desc
+        else R.string.tool_pressure_enable_desc
+    )
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier = Modifier
+            .height(48.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(bg)
+            .border(width = 1.dp, color = borderCol, shape = MaterialTheme.shapes.small)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 10.dp)
+            .semantics { contentDescription = desc }
+            .testTag("pressure_sensitivity_toggle_button")
+    ) {
+        Canvas(modifier = Modifier.size(width = 15.dp, height = 14.dp)) {
+            drawSmoothStroke(
+                points = listOf(
+                    StrokePoint(x = 1.5f, y = 11f, pressure = if (isPressureSensitive) 0.12f else 1f),
+                    StrokePoint(x = 7.5f, y = 3.5f, pressure = if (isPressureSensitive) 0.96f else 1f),
+                    StrokePoint(x = 13.5f, y = 9.5f, pressure = if (isPressureSensitive) 0.14f else 1f)
+                ),
+                color = fg,
+                widthDp = 2.4f,
+                isHighlighter = false,
+                isStylus = isPressureSensitive
+            )
+        }
+        Text(
+            text = stringResource(R.string.tool_pressure_label),
+            style = MaterialTheme.typography.labelSmall,
+            color = fg
         )
     }
 }
@@ -443,12 +723,12 @@ private fun EraserSizeRow(
                         .height(48.dp)
                         .clip(MaterialTheme.shapes.small)
                         .background(
-                            if (selected) MaterialTheme.colorScheme.secondaryContainer
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
                             else MaterialTheme.colorScheme.background
                         )
                         .border(
                             width = 1.dp,
-                            color = if (selected) MaterialTheme.colorScheme.onSurface
+                            color = if (selected) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.outline,
                             shape = MaterialTheme.shapes.small
                         )
@@ -459,7 +739,7 @@ private fun EraserSizeRow(
                     val iconDiameter = (radiusDp * 0.55f).coerceIn(6f, 16f)
                     Canvas(modifier = Modifier.size(18.dp)) {
                         drawCircle(
-                            color = ringColor,
+                            color = if (selected) ringColor else ringColor.copy(alpha = 0.7f),
                             radius = (iconDiameter / 2f).dp.toPx(),
                             style = Stroke(width = 1.4.dp.toPx())
                         )
@@ -467,7 +747,8 @@ private fun EraserSizeRow(
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -483,8 +764,8 @@ private fun ToolModePill(
     onClick: () -> Unit,
     tag: String
 ) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.background
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val bg = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background
+    val fg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -494,7 +775,7 @@ private fun ToolModePill(
             .clip(MaterialTheme.shapes.small)
             .background(bg)
             .border(
-                width = 1.dp,
+                width = if (selected) 1.5.dp else 1.dp,
                 color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 shape = MaterialTheme.shapes.small
             )
@@ -570,6 +851,11 @@ private fun GridBackgroundTogglePill(
 @Composable
 private fun LassoControlsRow(
     selectedCount: Int,
+    activeColorKey: String,
+    customColorKeys: List<String>,
+    isDarkTheme: Boolean,
+    onSelectColor: (String) -> Unit,
+    onOpenColorPicker: () -> Unit,
     onRotateLeft: (() -> Unit)?,
     onRotateRight: (() -> Unit)?,
     onScaleDown: (() -> Unit)?,
@@ -635,6 +921,48 @@ private fun LassoControlsRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Quick recolor swatches for selected strokes + Palette button
+                val lassoSwatches = (InkPaletteHelper.DEFAULT_PALETTE_KEYS + customColorKeys).distinct()
+                lassoSwatches.forEach { key ->
+                    val swatchColor = resolveInkColor(key, isDarkTheme)
+                    val isSelected = key.equals(activeColorKey, ignoreCase = true)
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable { onSelectColor(key) }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(if (isSelected) 22.dp else 18.dp)
+                                .clip(CircleShape)
+                                .background(swatchColor)
+                                .border(
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outline,
+                                    shape = CircleShape
+                                )
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = onOpenColorPicker,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .background(MaterialTheme.colorScheme.background)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Palette,
+                        contentDescription = stringResource(R.string.palette_customize_desc),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
                 if (onRotateLeft != null) {
                     IconButton(
                         onClick = onRotateLeft,

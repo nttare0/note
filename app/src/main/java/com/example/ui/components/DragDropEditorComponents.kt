@@ -54,6 +54,7 @@ import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.mimeTypes
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -254,6 +255,12 @@ fun DraggableChecklistSection(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 2.dp,
+                shape = MaterialTheme.shapes.medium,
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                spotColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
+            )
             .clip(MaterialTheme.shapes.medium)
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)

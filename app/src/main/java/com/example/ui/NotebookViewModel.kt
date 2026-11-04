@@ -64,6 +64,7 @@ data class EditorState(
     val activeTool: InkTool = InkTool.PEN,
     val activeColorKey: String = "INK",
     val activeStrokeWidth: Float = 3.4f,
+    val isPressureSensitive: Boolean = true,
     val savedPenWidth: Float = 3.4f,
     val savedMarkerWidth: Float = 16f,
     val savedEraserRadius: Float = 18f
@@ -79,6 +80,8 @@ data class WorkspaceUiState(
     val activeFilter: NoteFilter = NoteFilter.All,
     val searchQuery: String = "",
     val prefs: UserPrefs = UserPrefs(),
+    val customInkColors: List<String> = emptyList(),
+    val selectedNoteIds: Set<Long> = emptySet(),
     val isLoaded: Boolean = false
 )
 
@@ -88,17 +91,29 @@ class NotebookViewModel(
 
     private val _activeFilter = MutableStateFlow<NoteFilter>(NoteFilter.All)
     private val _searchQuery = MutableStateFlow("")
+    private val _selectedNoteIds = MutableStateFlow<Set<Long>>(emptySet())
 
     private val _activeEditor = MutableStateFlow<EditorState?>(null)
     val activeEditor: StateFlow<EditorState?> = _activeEditor.asStateFlow()
+
+    private val paletteAndSelectionFlow = combine(
+        repository.customInkColors,
+        _selectedNoteIds
+    ) { colors, selectedIds ->
+        colors to selectedIds
+    }
 
     val uiState: StateFlow<WorkspaceUiState> = combine(
         repository.allNotes,
         repository.allFolders,
         repository.prefsFlow,
         _activeFilter,
-        _searchQuery
-    ) { allNotes, folders, prefs, filter, query ->
+        combine(_searchQuery, paletteAndSelectionFlow) { q, pair -> Triple(q, pair.first, pair.second) }
+    ) { allNotes, folders, prefs, filter, queryAndMeta ->
+        val query = queryAndMeta.first
+        val customColors = queryAndMeta.second
+        val rawSelectedIds = queryAndMeta.third
+
         val nonTrashed = allNotes.filter { !it.isTrashed }
         val trashed = allNotes.filter { it.isTrashed }
         val folderCounts = nonTrashed
@@ -124,6 +139,9 @@ class NotebookViewModel(
             }
         }
 
+        val visibleIds = finalNotes.map { it.id }.toSet()
+        val validSelectedIds = rawSelectedIds.intersect(visibleIds)
+
         WorkspaceUiState(
             visibleNotes = finalNotes,
             folders = folders,
@@ -134,6 +152,8 @@ class NotebookViewModel(
             activeFilter = filter,
             searchQuery = query,
             prefs = prefs,
+            customInkColors = customColors,
+            selectedNoteIds = validSelectedIds,
             isLoaded = true
         )
     }.stateIn(
@@ -149,11 +169,48 @@ class NotebookViewModel(
     }
 
     fun selectFilter(filter: NoteFilter) {
+        _selectedNoteIds.value = emptySet()
         _activeFilter.value = filter
     }
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun toggleNoteSelection(noteId: Long) {
+        _selectedNoteIds.update { current ->
+            if (noteId in current) current - noteId else current + noteId
+        }
+    }
+
+    fun selectNote(noteId: Long) {
+        _selectedNoteIds.update { current -> current + noteId }
+    }
+
+    fun selectAllVisibleNotes() {
+        val allVisible = uiState.value.visibleNotes.map { it.id }.toSet()
+        _selectedNoteIds.value = allVisible
+    }
+
+    fun clearNoteSelection() {
+        _selectedNoteIds.value = emptySet()
+    }
+
+    fun deleteSelectedNotes(onCompleted: (deletedCount: Int, wasPermanent: Boolean) -> Unit = { _, _ -> }) {
+        val currentState = uiState.value
+        val idsToDelete = currentState.selectedNoteIds.toList()
+        if (idsToDelete.isEmpty()) return
+        val permanent = currentState.activeFilter == NoteFilter.Trash
+        _selectedNoteIds.value = emptySet()
+
+        viewModelScope.launch {
+            if (permanent) {
+                repository.deleteNotesPermanently(idsToDelete)
+            } else {
+                repository.moveNotesToTrash(idsToDelete)
+            }
+            onCompleted(idsToDelete.size, permanent)
+        }
     }
 
     fun toggleDarkTheme(currentlyDark: Boolean) {
@@ -590,6 +647,55 @@ class NotebookViewModel(
                 }
             }
         }
+    }
+
+    fun togglePressureSensitivity() {
+        _activeEditor.update { state ->
+            state?.copy(isPressureSensitive = !state.isPressureSensitive)
+        }
+    }
+
+    fun addCustomInkColor(rawHexKey: String) {
+        viewModelScope.launch {
+            val savedKey = repository.addCustomInkColor(rawHexKey) ?: return@launch
+            selectInkColor(savedKey)
+        }
+    }
+
+    fun removeCustomInkColor(colorKey: String) {
+        viewModelScope.launch {
+            repository.removeCustomInkColor(colorKey)
+            _activeEditor.update { state ->
+                if (state != null && state.activeColorKey.equals(colorKey, ignoreCase = true)) {
+                    state.copy(activeColorKey = "INK")
+                } else {
+                    state
+                }
+            }
+        }
+    }
+
+    fun selectCanvasElementAtPoint(xDp: Float, yDp: Float): Boolean {
+        var didSelect = false
+        _activeEditor.update { state ->
+            if (state == null) return@update null
+            val hit = LassoSelectionEngine.findElementAtPoint(
+                xDp = xDp,
+                yDp = yDp,
+                strokes = state.strokes,
+                images = state.images
+            )
+            if (!hit.isEmpty) {
+                didSelect = true
+                state.copy(
+                    activeTool = InkTool.LASSO,
+                    lassoSelection = hit
+                )
+            } else {
+                state
+            }
+        }
+        return didSelect
     }
 
     fun completeLassoSelection(lassoPoints: List<StrokePoint>) {

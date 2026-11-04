@@ -49,8 +49,8 @@ object CanvasPngExportHelper {
         val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // 1. Fill page background
-        val bgHex = if (isDarkSurface) "#18181B" else "#FFFFFF"
+        // 1. Fill page background (Excalidraw Dark Tone Ink #121212 or crisp Whiteboard #FFFFFF)
+        val bgHex = if (isDarkSurface) "#121212" else "#FFFFFF"
         canvas.drawColor(Color.parseColor(bgHex))
 
         // 2. Render active paper template lines/dots
@@ -85,19 +85,75 @@ object CanvasPngExportHelper {
             }
         }
 
-        // 3. Render smoothed quadratic Bezier strokes
+        // 3. Render smoothed quadratic Bezier strokes (supporting stylus pressure variable width)
         strokes.forEach { stroke ->
             val pts = stroke.points
             if (pts.isNotEmpty()) {
-                val avgPressure = pts.map { it.pressure }.average().toFloat().coerceIn(0.65f, 1.35f)
-                val effectiveWidthDp = if (stroke.isHighlighter) stroke.widthDp else stroke.widthDp * avgPressure
                 val strokeColor = resolveExportInkColor(
                     colorKey = stroke.colorKey,
                     isHighlighter = stroke.isHighlighter,
                     isDarkSurface = isDarkSurface
                 )
+                val useVariablePressure = StrokePressureEngine.hasVariablePressure(
+                    points = pts,
+                    isStylusStroke = stroke.isStylus
+                )
 
-                if (pts.size == 1) {
+                if (useVariablePressure) {
+                    val spine = StrokePressureEngine.buildVariableWidthSpine(
+                        points = pts,
+                        baseWidthDp = stroke.widthDp,
+                        isHighlighter = stroke.isHighlighter,
+                        maxStepDp = 1.8f
+                    )
+                    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = strokeColor
+                        style = Paint.Style.FILL
+                    }
+                    if (spine.size == 1) {
+                        canvas.drawCircle(
+                            spine[0].xDp * scalePxPerDp,
+                            spine[0].yDp * scalePxPerDp,
+                            spine[0].radiusDp * scalePxPerDp,
+                            fillPaint
+                        )
+                    } else if (spine.size > 1) {
+                        val ribbonPath = Path().apply {
+                            fillType = Path.FillType.WINDING
+                            var prevX = spine[0].xDp * scalePxPerDp
+                            var prevY = spine[0].yDp * scalePxPerDp
+                            var prevR = spine[0].radiusDp * scalePxPerDp
+                            addCircle(prevX, prevY, prevR, Path.Direction.CW)
+
+                            for (i in 1 until spine.size) {
+                                val curX = spine[i].xDp * scalePxPerDp
+                                val curY = spine[i].yDp * scalePxPerDp
+                                val curR = spine[i].radiusDp * scalePxPerDp
+                                addCircle(curX, curY, curR, Path.Direction.CW)
+
+                                val quad = StrokePressureEngine.computeBitangentQuad(
+                                    x0 = prevX,
+                                    y0 = prevY,
+                                    r0 = prevR,
+                                    x1 = curX,
+                                    y1 = curY,
+                                    r1 = curR
+                                )
+                                if (quad != null) {
+                                    moveTo(quad.x0, quad.y0)
+                                    lineTo(quad.x1, quad.y1)
+                                    lineTo(quad.x2, quad.y2)
+                                    lineTo(quad.x3, quad.y3)
+                                    close()
+                                }
+                                prevX = curX
+                                prevY = curY
+                                prevR = curR
+                            }
+                        }
+                        canvas.drawPath(ribbonPath, fillPaint)
+                    }
+                } else if (pts.size == 1) {
                     val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         color = strokeColor
                         style = Paint.Style.FILL
@@ -105,14 +161,14 @@ object CanvasPngExportHelper {
                     canvas.drawCircle(
                         pts[0].x * scalePxPerDp,
                         pts[0].y * scalePxPerDp,
-                        (effectiveWidthDp * scalePxPerDp) / 2f,
+                        (stroke.widthDp * scalePxPerDp) / 2f,
                         dotPaint
                     )
                 } else {
                     val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         color = strokeColor
                         style = Paint.Style.STROKE
-                        strokeWidth = effectiveWidthDp * scalePxPerDp
+                        strokeWidth = stroke.widthDp * scalePxPerDp
                         strokeCap = Paint.Cap.ROUND
                         strokeJoin = Paint.Join.ROUND
                     }
@@ -224,12 +280,12 @@ object CanvasPngExportHelper {
     ) {
         val spacingPx = 28f * scale
         val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor(if (isDarkSurface) "#27272A" else "#E4E4E7")
+            color = Color.parseColor(if (isDarkSurface) "#292833" else "#ECEBF4")
             strokeWidth = 1f * scale
             style = Paint.Style.STROKE
         }
         val marginPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor(if (isDarkSurface) "#52525B" else "#D4D4D8")
+            color = Color.parseColor(if (isDarkSurface) "#3D3B4F" else "#D5D3E6")
             strokeWidth = 1.5f * scale
             style = Paint.Style.STROKE
         }
@@ -296,13 +352,13 @@ object CanvasPngExportHelper {
         isHighlighter: Boolean,
         isDarkSurface: Boolean
     ): Int {
-        val base = when (colorKey) {
-            "AMBER" -> Color.parseColor(if (isDarkSurface) "#F58436" else "#E86A17")
-            "SLATE" -> Color.parseColor("#71717A")
-            "BLUE" -> Color.parseColor(if (isDarkSurface) "#60A5FA" else "#2563EB")
-            "GREEN" -> Color.parseColor(if (isDarkSurface) "#4ADE80" else "#16A34A")
-            "CORAL" -> Color.parseColor(if (isDarkSurface) "#F87171" else "#DC2626")
-            else -> Color.parseColor(if (isDarkSurface) "#FAFAFA" else "#18181B")
+        val base = InkPaletteHelper.parseHexRgbToArgbInt(colorKey) ?: when (colorKey) {
+            "AMBER" -> Color.parseColor(if (isDarkSurface) "#B4ACEC" else "#6965DB")
+            "SLATE" -> Color.parseColor(if (isDarkSurface) "#ADB5BD" else "#7E706C")
+            "BLUE" -> Color.parseColor(if (isDarkSurface) "#74C0FC" else "#1971C2")
+            "GREEN" -> Color.parseColor(if (isDarkSurface) "#69DB7C" else "#2F9E44")
+            "CORAL" -> Color.parseColor(if (isDarkSurface) "#FF8787" else "#E03131")
+            else -> Color.parseColor(if (isDarkSurface) "#E5E5EC" else "#121212")
         }
         return if (isHighlighter) {
             Color.argb(88, Color.red(base), Color.green(base), Color.blue(base))

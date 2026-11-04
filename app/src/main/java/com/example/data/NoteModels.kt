@@ -38,7 +38,8 @@ data class InkStroke(
     val points: List<StrokePoint>,
     val colorKey: String, // "INK", "AMBER", "SLATE", "BLUE", "GREEN", "CORAL"
     val widthDp: Float,
-    val isHighlighter: Boolean = false
+    val isHighlighter: Boolean = false,
+    val isStylus: Boolean = false
 )
 
 @JsonClass(generateAdapter = true)
@@ -84,5 +85,20 @@ data class NoteEntity(
     val isPinned: Boolean = false,
     val isTrashed: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "custom_ink_colors")
+data class CustomInkColorEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val colorKey: String,
+    val label: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "app_preferences")
+data class AppPreferenceEntity(
+    @PrimaryKey val prefKey: String,
+    val prefValue: String,
     val updatedAt: Long = System.currentTimeMillis()
 )

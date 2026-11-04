@@ -27,6 +27,12 @@ data class CanvasHistoryStack(
     val canRedo: Boolean
         get() = redoSnapshots.isNotEmpty()
 
+    val undoCount: Int
+        get() = undoSnapshots.size
+
+    val redoCount: Int
+        get() = redoSnapshots.size
+
     fun recordBeforeChange(
         previousStrokes: List<InkStroke>,
         previousImages: List<NoteImageAttachment> = emptyList()
